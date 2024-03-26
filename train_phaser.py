@@ -4,8 +4,12 @@ from utils import dataset as ds
 from utils import loss_modules
 from model import phaser
 import os
-import pytorch_lightning as pl
-from pytorch_lightning.loggers import WandbLogger
+# import pytorch_lightning as pl
+import lightning.pytorch as pl
+# from pytorch_lightning.loggers import WandbLogger
+from lightning.pytorch.loggers import WandbLogger
+from lightning.pytorch.callbacks import ModelCheckpoint
+import torch.nn.functional as F
 import time
 import torch
 from torch.utils.data import DataLoader
@@ -58,8 +62,13 @@ class Phaser(pl.LightningModule):
         x, y = batch
         y_pred = self.model.forward(x)
         loss = self.loss_fcn(y, y_pred)
+        # loss = F.l1_loss(y_pred, y)
 
-        # Logging
+        # with torch.no_grad():
+        #     esr_loss = self.loss_fcn(y, y_pred)
+
+        # # Logging
+        # self.log("train_loss", loss, on_step=True, prog_bar=True, logger=True)
         self.log("train_loss_esr", loss, on_step=True, prog_bar=True, logger=True)
         new_time = time.time()
         self.log(
@@ -97,6 +106,7 @@ class Phaser(pl.LightningModule):
 
     def configure_optimizers(self):
         opt = torch.optim.Adam(self.parameters(), lr=1e-3, eps=1e-08, weight_decay=0)
+        # opt = torch.optim.SGD(self.parameters(), lr=1e-4, momentum=0.9, weight_decay=0.0)
         return opt
 
     def on_train_epoch_start(self):
@@ -210,6 +220,7 @@ if __name__ == "__main__":
         logger=wandb_logger,
         max_epochs=args.max_epochs,
         accelerator="gpu" if torch.cuda.is_available() else "cpu",
+        callbacks=[ModelCheckpoint(monitor="train_loss_esr", filename="{epoch}-{train_loss_esr:.4f}")],
     )
     trainer.fit(model, train_dataloaders=train_loader, val_dataloaders=test_loader)
     trainer.test(dataloaders=test_loader)
