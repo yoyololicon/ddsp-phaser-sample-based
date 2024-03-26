@@ -31,6 +31,14 @@ def coeff_product(polynomials: Union[Tensor, List[Tensor]]) -> Tensor:
     return prod
 
 
+def logits2coeff(logits: Tensor) -> Tensor:
+    assert logits.shape[-1] == 2
+    a1 = torch.tanh(logits[..., 0]) * 2
+    a1_abs = torch.abs(a1)
+    a2 = 0.5 * ((2 - a1_abs) * torch.tanh(logits[..., 1]) + a1_abs)
+    return torch.stack([torch.ones_like(a1), a1, a2], dim=-1)
+
+
 class PhaserSampleBased(torch.nn.Module):
     def __init__(
         self,
@@ -134,13 +142,15 @@ class PhaserSampleBased(torch.nn.Module):
 
         # filter h1
         b1 = torch.cat([self.filter1_params["DC"], self.filter1_params["b"]])
-        a1 = torch.cat([b1.new_ones(1), self.filter1_params["a"]])
+        # a1 = torch.cat([b1.new_ones(1), self.filter1_params["a"]])
+        a1 = logits2coeff(self.filter1_params["a"])
         h1 = lfilter(x, a1, b1, clamp=False)
 
         h1g = self.g1 * h1
 
         b2 = torch.cat([b1.new_ones(1), self.filter2_params["b"]])
-        a2 = torch.cat([b1.new_ones(1), self.filter2_params["a"]])
+        # a2 = torch.cat([b1.new_ones(1), self.filter2_params["a"]])
+        a2 = logits2coeff(self.filter2_params["a"])
 
         allpass_b = torch.stack([p, -torch.ones_like(p)], dim=1)
         allpass_a = torch.stack([torch.ones_like(p), -p], dim=1)
